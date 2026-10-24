@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">DANA Mutasi Bot</string>
+    <string name="accessibility_description">Membaca teks transaksi yang terlihat pada layar ketika pengguna membuka DANA.</string>
+</resources>
