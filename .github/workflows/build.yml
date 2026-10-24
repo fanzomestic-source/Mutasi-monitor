@@ -5,19 +5,25 @@ on:
     branches: [ main, master ]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
       - name: Ekstrak ZIP otomatis
         run: |
-          ZIP=$(ls *.zip | head -n1)
+          ZIP=$(find . -maxdepth 1 -name '*.zip' | head -n1)
+          if [ -z "$ZIP" ]; then echo "::error::Tidak ada file .zip di root repo"; exit 1; fi
           echo "Memakai: $ZIP"
           mkdir -p src && unzip -q "$ZIP" -d src
-          DIR=$(dirname "$(find src -name settings.gradle.kts | head -n1)")
-          echo "PROJECT_DIR=$DIR" >> "$GITHUB_ENV"
+          SETTINGS=$(find src -name 'settings.gradle*' | head -n1)
+          if [ -z "$SETTINGS" ]; then echo "::error::settings.gradle tidak ditemukan di dalam zip"; exit 1; fi
+          echo "PROJECT_DIR=$(dirname "$SETTINGS")" >> "$GITHUB_ENV"
 
       - uses: actions/setup-java@v4
         with:
@@ -26,15 +32,29 @@ jobs:
 
       - uses: android-actions/setup-android@v3
 
+      - name: Pasang Android SDK
+        run: sdkmanager "platforms;android-35" "build-tools;34.0.0"
+
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: 8.9
 
       - name: Build debug APK
-        working-directory: ${{ env.PROJECT_DIR }}
-        run: gradle assembleDebug --no-daemon
+        run: |
+          cd "$PROJECT_DIR"
+          gradle assembleDebug --no-daemon --stacktrace
+          ls -l app/build/outputs/apk/debug/
 
       - uses: actions/upload-artifact@v4
         with:
           name: DanaMutasiMonitor-debug-apk
           path: ${{ env.PROJECT_DIR }}/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+
+      - name: Simpan laporan error (jika gagal)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-reports
+          path: ${{ env.PROJECT_DIR }}/app/build/reports
+          if-no-files-found: ignore
